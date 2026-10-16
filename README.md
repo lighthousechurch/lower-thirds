@@ -9,7 +9,20 @@ sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
 pip install -r requirements.txt
 ```
 
-## Weekly run
+## Automatic run (GitHub Actions)
+
+`.github/workflows/lower-thirds.yml` runs Wed–Sat at 10am and 7pm Pacific. Each run checks Gmail for Josh's
+slides email; once a draft has been made for this week, the remaining runs stop early. The draft is a reply-all
+on Josh's thread with the zip attached — review it in Gmail and hit send. Each run's page shows the slide text
+for checking, and the PNGs are downloadable as a run artifact.
+
+Run it by hand from the Actions tab ("Run workflow"), optionally with a thread id, dry run, or force.
+
+One-time setup: create a Desktop OAuth client (Gmail API enabled, Internal consent screen) in Google Cloud,
+run `python3 authorize.py client_secret_….json` on your computer, and save the printed JSON as the repo
+secret `GMAIL_TOKEN_JSON`.
+
+## Manual run
 
 1. Download all JPG attachments from Josh's "Sermon Slides" email into `slides/`.
 2. Read the text off the slides:

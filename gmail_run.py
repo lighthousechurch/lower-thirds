@@ -6,6 +6,7 @@ Needs GMAIL_TOKEN_JSON (from authorize.py) in the environment.
 
 Usage:
   gmail_run.py [--thread THREAD_ID] [--dry-run] [--force]
+  gmail_run.py --check     # only report whether there is new work (run=true/false)
 """
 import argparse
 import base64
@@ -15,6 +16,8 @@ import os
 import re
 import sys
 import tempfile
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 from email.utils import getaddresses
 from pathlib import Path
@@ -78,6 +81,14 @@ def label_id(svc, create=False):
     if create:
         return svc.users().labels().create(userId="me", body={"name": DONE_LABEL}).execute()["id"]
     return None
+
+
+def done_this_week(svc):
+    """True if a slides email from this week (since Monday, Pacific) was already drafted."""
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
+    monday = (now - timedelta(days=now.weekday())).strftime("%Y/%m/%d")
+    q = f'label:"{DONE_LABEL}" after:{monday}'
+    return bool(svc.users().threads().list(userId="me", q=q, maxResults=1).execute().get("threads"))
 
 
 def pick_thread(svc, me, thread_id=None, force=False):
@@ -148,11 +159,24 @@ def main():
     ap.add_argument("--thread", help="use this thread id instead of searching")
     ap.add_argument("--dry-run", action="store_true", help="build the zip but don't create a draft")
     ap.add_argument("--force", action="store_true", help="ignore the already-drafted/replied checks")
+    ap.add_argument("--check", action="store_true", help="only report whether there is new work")
     ap.add_argument("--out", default="out")
     args = ap.parse_args()
 
     svc = gmail()
     me = svc.users().getProfile(userId="me").execute()["emailAddress"].lower()
+    if args.check:
+        if not args.force and not args.thread and done_this_week(svc):
+            print("Already drafted this week's lower thirds.")
+            thread = None
+        else:
+            thread = pick_thread(svc, me, args.thread, args.force)
+        found = "true" if thread else "false"
+        print(f"run={found}")
+        if os.environ.get("GITHUB_OUTPUT"):
+            with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                f.write(f"run={found}\n")
+        return
     thread = pick_thread(svc, me, args.thread, args.force)
     if not thread:
         print("No new sermon slides email.")
