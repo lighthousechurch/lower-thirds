@@ -2,3 +2,5 @@ __pycache__/
 out/
 slides/
 *.zip
+client_secret*.json
+token*.json

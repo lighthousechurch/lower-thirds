@@ -114,6 +114,29 @@ def render(text, band, title=False):
     return img, lines
 
 
+def build(texts, out, zip_name=None):
+    """Render texts (slide 1 = title) to out/01.png ... and optionally zip them."""
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    band = Image.open(BAND).convert("RGBA").resize((W, H - BAND_Y))
+    pad = max(2, len(str(len(texts))))
+    names = []
+    for i, t in enumerate(texts, 1):
+        img, lines = render(t, band, title=(i == 1))
+        name = f"{i:0{pad}d}.png"
+        img.save(out / name)
+        names.append(name)
+        print(name, "|", " / ".join(lines))
+    if not zip_name:
+        return None
+    zpath = out / zip_name
+    with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+        for name in names:
+            z.write(out / name, name)
+    print("zip:", zpath)
+    return zpath
+
+
 def main():
     cmd = sys.argv[1]
     if cmd == "ocr":
@@ -124,24 +147,8 @@ def main():
         print()
     elif cmd == "render":
         texts = [e["text"] if isinstance(e, dict) else e for e in json.load(open(sys.argv[2]))]
-        out = Path(sys.argv[3])
-        out.mkdir(parents=True, exist_ok=True)
-        band = Image.open(BAND).convert("RGBA").resize((W, H - BAND_Y))
-        pad = max(2, len(str(len(texts))))
-        names = []
-        for i, t in enumerate(texts, 1):
-            img, lines = render(t, band, title=(i == 1))
-            name = f"{i:0{pad}d}.png"
-            img.save(out / name)
-            names.append(name)
-            print(name, "|", " / ".join(lines))
-        if "--zip" in sys.argv:
-            zpath = out / sys.argv[sys.argv.index("--zip") + 1]
-            with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
-                for name in names:
-                    z.write(out / name, name)
-            print("zip:", zpath)
-
+        zip_name = sys.argv[sys.argv.index("--zip") + 1] if "--zip" in sys.argv else None
+        build(texts, Path(sys.argv[3]), zip_name)
 
 if __name__ == "__main__":
     main()
