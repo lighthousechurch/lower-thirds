@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+body{margin:0;background:#f4f3ef;color:#1d2124;font-family:"IBM Plex Sans",system-ui,sans-serif}
+a{color:#2c5a6b}a:hover{color:#1b3b47}
+textarea:focus{outline:2px solid #6f97a6;outline-offset:-1px}
+</style>
+</helmet>
+<div style="max-width:1280px;margin:0 auto;padding:32px 28px 80px;display:flex;flex-direction:column;gap:24px">
+  <header style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#6a7175">Livestream · Lower thirds</div>
+      <h1 style="margin:0;font-size:28px;font-weight:600;letter-spacing:-.01em">Slide → lower third converter</h1>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <span style="font-size:13px;color:#6a7175">{{ countLabel }}</span>
+      <button onClick="{{ exportZip }}" disabled="{{ exportDisabled }}" style="font:inherit;font-size:14px;font-weight:600;padding:11px 18px;border-radius:6px;border:0;background:#1d2124;color:#f4f3ef;cursor:pointer" style-hover="background:#2c5a6b">{{ exportLabel }}</button>
+    </div>
+  </header>
+
+  <div onDrop="{{ onDrop }}" onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onClick="{{ pickFiles }}" style="border:1.5px dashed {{ dropBorder }};border-radius:10px;background:#fbfaf7;padding:28px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;text-align:center">
+    <div style="font-size:15px;font-weight:500">Drop the slide JPGs from Josh's email here</div>
+    <div style="font-size:13px;color:#6a7175">Ordered by the number in each filename (Slide1, Slide2 … Slide10). Text is read automatically — review it below.</div>
+    <input ref="{{ fileRef }}" type="file" accept="image/jpeg,image/png" multiple="{{ true }}" onChange="{{ onPick }}" style="display:none">
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;align-items:end">
+    <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500">Sermon title (used for slide 1)
+      <input value="{{ title }}" onChange="{{ onTitle }}" placeholder="e.g. The Church of Philadelphia" style="font:inherit;font-size:14px;padding:10px 12px;border:1px solid #d6d3cb;border-radius:6px;background:#fff">
+    </label>
+    <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500">Long passages
+      <div style="display:flex;border:1px solid #d6d3cb;border-radius:6px;overflow:hidden;background:#fff">
+        <button onClick="{{ setFit }}" style="flex:1;font:inherit;font-size:13px;padding:10px;border:0;cursor:pointer;background:{{ fitBg }};color:{{ fitFg }}">Shrink to fit all text</button>
+        <button onClick="{{ setTrunc }}" style="flex:1;font:inherit;font-size:13px;padding:10px;border:0;cursor:pointer;background:{{ truncBg }};color:{{ truncFg }}">Cut at 2 lines…</button>
+      </div>
+    </div>
+    <label style="display:flex;gap:10px;align-items:center;font-size:13px;padding:10px 0">
+      <input type="checkbox" checked="{{ firstIsTitle }}" onChange="{{ toggleTitle }}">
+      First slide is the series graphic (use title)
+    </label>
+  </div>
+
+  <sc-if value="{{ empty }}" hint-placeholder-val="{{ true }}">
+    <div style="font-size:13px;color:#8a8f92;font-family:'IBM Plex Mono',monospace;padding:8px 0">No slides yet.</div>
+  </sc-if>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <sc-for list="{{ rows }}" as="r" hint-placeholder-count="0">
+      <div style="display:grid;grid-template-columns:minmax(0,220px) minmax(0,1.3fr) minmax(0,1fr);gap:16px;background:#fff;border:1px solid #e4e1d9;border-radius:10px;padding:14px;align-items:start">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <img src="{{ r.thumb }}" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:4px;display:block">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6a7175;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="width:100%;aspect-ratio:16/9;border-radius:4px;overflow:hidden;background-color:#d9dcde;background-image:repeating-conic-gradient(#c9cdd0 0% 25%, transparent 0% 50%);background-size:16px 16px">
+            <img src="{{ r.preview }}" style="width:100%;height:100%;display:block">
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#1d2124;font-weight:500">→ {{ r.out }}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;height:100%">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#6a7175"><span>Lower-third text</span><span style="font-family:'IBM Plex Mono',monospace">{{ r.status }}</span></div>
+          <textarea value="{{ r.text }}" onChange="{{ r.onText }}" style="flex:1;min-height:120px;font:inherit;font-size:14px;line-height:1.45;padding:10px 12px;border:1px solid #d6d3cb;border-radius:6px;resize:vertical;background:#fbfaf7"></textarea>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;textColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#1b2a33&quot;,&quot;options&quot;:[&quot;#1b2a33&quot;,&quot;#111111&quot;,&quot;#ffffff&quot;],&quot;tsType&quot;:&quot;string&quot;},&quot;fontSize&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:58,&quot;min&quot;:44,&quot;max&quot;:72,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;}}">
+class Component extends DCLogic {
+  state = { slides: [], title: '', mode: 'fit', firstIsTitle: true, drag: false, exporting: false };
+  fileRef = React.createRef();
+  band = null; worker = null; timers = {};
+
+  componentDidMount() {
+    const im = new Image(); im.onload = () => { this.band = im; this.refreshAll(); }; im.src = 'band.png';
+    document.fonts.load('700 58px "Source Serif 4"').then(() => this.refreshAll());
+  }
+  get color() { return this.props.textColor ?? '#1b2a33'; }
+  get baseSize() { return this.props.fontSize ?? 58; }
+
+  textFor(s, i) { return (i === 0 && this.state.firstIsTitle) ? this.state.title : s.text; }
+
+  layout(ctx, text) {
+    const maxW = 1920 - 176;
+    const wrap = (size) => {
+      ctx.font = `700 ${size}px "Source Serif 4", Georgia, serif`;
+      const words = text.split(/\s+/).filter(Boolean); const lines = []; let cur = '';
+      for (const w of words) { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
+      if (cur) lines.push(cur); return lines;
+    };
+    const truncate = (size, max) => {
+      let lines = wrap(size); if (lines.length <= max) return lines;
+      const words = lines.slice(max - 1).join(' ').split(' '); let last = '';
+      for (const w of words) { const t = last ? last + ' ' + w : w; if (ctx.measureText(t + '...').width > maxW) break; last = t; }
+      return [...lines.slice(0, max - 1), last.replace(/[,;:.\s]+$/, '') + '...'];
+    };
+    const base = this.baseSize;
+    if (this.state.mode === 'trunc') return { size: base, lines: truncate(base, 2) };
+    for (let s = base; s >= 44; s -= 2) { const l = wrap(s); if (l.length <= 2) return { size: s, lines: l }; }
+    for (let s = 50; s >= 34; s -= 2) { const l = wrap(s); if (l.length <= 3) return { size: s, lines: l }; }
+    return { size: 34, lines: truncate(34, 4) };
+  }
+
+  render(text) {
+    const c = document.createElement('canvas'); c.width = 1920; c.height = 1080;
+    const ctx = c.getContext('2d');
+    if (this.band) ctx.drawImage(this.band, 0, 880, 1920, 200); else { ctx.fillStyle = '#a9c0c8'; ctx.fillRect(0, 880, 1920, 200); }
+    const { size, lines } = this.layout(ctx, (text || '').trim());
+    ctx.font = `700 ${size}px "Source Serif 4", Georgia, serif`; ctx.fillStyle = this.color; ctx.textBaseline = 'alphabetic';
+    const lh = Math.round(size * 1.04), n = lines.length;
+    lines.forEach((l, i) => ctx.fillText(l, 88, 980 - (n - 1) * lh / 2 + i * lh + size * 0.33));
+    return c;
+  }
+  preview(text) {
+    const full = this.render(text); const p = document.createElement('canvas'); p.width = 960; p.height = 540;
+    p.getContext('2d').drawImage(full, 0, 0, 960, 540); return p.toDataURL('image/png');
+  }
+  refresh(id) {
+    clearTimeout(this.timers[id]);
+    this.timers[id] = setTimeout(() => this.setState(st => ({ slides: st.slides.map((s, i) => s.id === id ? { ...s, preview: this.preview(this.textFor(s, i)) } : s) })), 120);
+  }
+  refreshAll() { this.setState(st => ({ slides: st.slides.map((s, i) => ({ ...s, preview: this.preview(this.textFor(s, i)) })) })); }
+  componentDidUpdate(pp) { if (pp.textColor !== this.props.textColor || pp.fontSize !== this.props.fontSize) this.refreshAll(); }
+
+  async addFiles(list) {
+    const files = [...list].filter(f => /image\/(jpe?g|png)/.test(f.type)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    if (!files.length) return;
+    const add = files.map((f, k) => ({ id: Date.now() + '-' + k, name: f.name, file: f, thumb: URL.createObjectURL(f), text: '', status: 'queued', preview: '' }));
+    this.setState(st => ({ slides: [...st.slides, ...add].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })) }), () => this.refreshAll());
+    for (const s of add) await this.ocr(s);
+  }
+  async ocr(s) {
+    const upd = (p) => this.setState(st => ({ slides: st.slides.map(x => x.id === s.id ? { ...x, ...p } : x) }));
+    const idx = this.state.slides.findIndex(x => x.id === s.id);
+    if (idx === 0 && this.state.firstIsTitle) { upd({ status: 'title slide' }); return; }
+    upd({ status: 'reading…' });
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = s.thumb; });
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+      const d = ctx.getImageData(0, 0, c.width, c.height), p = d.data;
+      for (let i = 0; i < p.length; i += 4) { const m = Math.min(p[i], p[i + 1], p[i + 2]); const v = m > 232 ? 0 : 255; p[i] = p[i + 1] = p[i + 2] = v; }
+      ctx.putImageData(d, 0, 0);
+      if (!this.worker) this.worker = await window.Tesseract.createWorker('eng');
+      const { data } = await this.worker.recognize(c);
+      const text = data.text.replace(/\s*\n\s*/g, ' ').replace(/\|/g, 'I').replace(/\s{2,}/g, ' ').replace(/[^\x20-\x7E\u2018-\u201D\u2014\u2026]/g, '').trim();
+      this.setState(st => ({ slides: st.slides.map((x, i) => x.id === s.id ? { ...x, text, status: 'check text', preview: this.preview(text) } : x) }));
+    } catch (e) { console.error(e); upd({ status: 'type text' }); }
+  }
+
+  async exportZip() {
+    const st = this.state; if (!st.slides.length || !window.JSZip) return;
+    this.setState({ exporting: true });
+    const zip = new window.JSZip(); const pad = String(st.slides.length).length < 2 ? 2 : String(st.slides.length).length;
+    for (let i = 0; i < st.slides.length; i++) {
+      const c = this.render(this.textFor(st.slides[i], i));
+      const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+      zip.file(String(i + 1).padStart(pad, '0') + '.png', blob);
+    }
+    const out = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(out);
+    a.download = (st.title ? st.title + ' - ' : '') + 'lower thirds.zip'; a.click();
+    this.setState({ exporting: false });
+  }
+
+  renderVals() {
+    const st = this.state, n = st.slides.length, pad = String(n).length < 2 ? 2 : String(n).length;
+    const on = (m) => m === st.mode;
+    return {
+      fileRef: this.fileRef, title: st.title, firstIsTitle: st.firstIsTitle, empty: n === 0,
+      countLabel: n ? `${n} slide${n > 1 ? 's' : ''}` : '',
+      exportLabel: st.exporting ? 'Exporting…' : 'Download PNGs (.zip)', exportDisabled: !n || st.exporting,
+      dropBorder: st.drag ? '#2c5a6b' : '#c9c5bb',
+      fitBg: on('fit') ? '#1d2124' : '#fff', fitFg: on('fit') ? '#f4f3ef' : '#1d2124',
+      truncBg: on('trunc') ? '#1d2124' : '#fff', truncFg: on('trunc') ? '#f4f3ef' : '#1d2124',
+      setFit: () => this.setState({ mode: 'fit' }, () => this.refreshAll()),
+      setTrunc: () => this.setState({ mode: 'trunc' }, () => this.refreshAll()),
+      toggleTitle: (e) => this.setState({ firstIsTitle: e.target.checked }, () => this.refreshAll()),
+      onTitle: (e) => this.setState({ title: e.target.value }, () => st.slides[0] && this.refresh(st.slides[0].id)),
+      pickFiles: () => this.fileRef.current && this.fileRef.current.click(),
+      onPick: (e) => { this.addFiles(e.target.files); e.target.value = ''; },
+      onDragOver: (e) => { e.preventDefault(); if (!st.drag) this.setState({ drag: true }); },
+      onDragLeave: () => this.setState({ drag: false }),
+      onDrop: (e) => { e.preventDefault(); this.setState({ drag: false }); this.addFiles(e.dataTransfer.files); },
+      exportZip: () => this.exportZip(),
+      rows: st.slides.map((s, i) => {
+        const isT = i === 0 && st.firstIsTitle;
+        return {
+          name: s.name, thumb: s.thumb, preview: s.preview, out: String(i + 1).padStart(pad, '0') + '.png',
+          text: isT ? st.title : s.text, status: isT ? 'uses title ↑' : s.status,
+          onText: (e) => { const v = e.target.value; if (isT) this.setState({ title: v }, () => this.refresh(s.id)); else this.setState(x => ({ slides: x.slides.map(y => y.id === s.id ? { ...y, text: v, status: 'edited' } : y) }), () => this.refresh(s.id)); }
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>
