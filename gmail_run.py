@@ -31,7 +31,8 @@ import lower_thirds
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 SEARCH = ("from:josh@lighthousechurchnc.org has:attachment "
-          "(filename:jpg OR filename:jpeg) newer_than:14d")
+          "(filename:jpg OR filename:jpeg) (sermon OR slides) newer_than:14d")
+SLIDE_NAME = re.compile(r"^slide\s*\d+\.jpe?g$", re.I)
 DONE_LABEL = "Lower thirds/Drafted"
 BODY = ("Hey @Febe Garcia and @Diego Duarte, here are the lower-thirds in .png format. "
         "Let me know if these work!")
@@ -91,6 +92,16 @@ def done_this_week(svc):
     return bool(svc.users().threads().list(userId="me", q=q, maxResults=1).execute().get("threads"))
 
 
+def slides_message(thread):
+    """Josh's newest message in the thread with Slide1.jpeg, Slide2.jpeg ... attached."""
+    for m in reversed(thread["messages"]):
+        if "josh@" not in headers(m).get("from", "").lower():
+            continue
+        if sum(bool(SLIDE_NAME.match(p.get("filename") or "")) for p in parts(m["payload"])) >= 2:
+            return m
+    return None
+
+
 def pick_thread(svc, me, thread_id=None, force=False):
     ids = [thread_id] if thread_id else [
         t["id"] for t in svc.users().threads().list(userId="me", q=SEARCH, maxResults=5).execute().get("threads", [])]
@@ -98,12 +109,15 @@ def pick_thread(svc, me, thread_id=None, force=False):
     for tid in ids:  # newest first
         thread = svc.users().threads().get(userId="me", id=tid, format="full").execute()
         msgs = thread["messages"]
+        if not slides_message(thread):
+            print(f"thread {tid}: no SlideN.jpeg attachments, skipping")
+            continue
         if force:
             return thread
         if done and any(done in m.get("labelIds", []) for m in msgs):
             print(f"thread {tid}: already drafted, skipping")
             continue
-        slides_idx = max(i for i, m in enumerate(msgs) if "josh@" in headers(m).get("from", "").lower())
+        slides_idx = msgs.index(slides_message(thread))
         if any(me in headers(m).get("from", "").lower() for m in msgs[slides_idx + 1:]):
             print(f"thread {tid}: already replied, skipping")
             continue
@@ -118,7 +132,7 @@ def download_slides(svc, msg, dest):
         if not name:
             continue
         names.append(name)
-        if not re.search(r"\.jpe?g$", name, re.I):
+        if not SLIDE_NAME.match(name):
             continue
         att = svc.users().messages().attachments().get(
             userId="me", messageId=msg["id"], id=p["body"]["attachmentId"]).execute()
@@ -182,8 +196,7 @@ def main():
         print("No new sermon slides email.")
         return
 
-    msg = next(m for m in reversed(thread["messages"])
-               if "josh@" in headers(m).get("from", "").lower() and any(p.get("filename") for p in parts(m["payload"])))
+    msg = slides_message(thread)
     subject = headers(msg).get("subject", "")
     print(f"Thread {thread['id']}: {subject}")
 
@@ -191,7 +204,7 @@ def main():
         slides, names = download_slides(svc, msg, tmp)
         title = find_title(plain_body(msg), names, subject)
         if not title:
-            sys.exit("Couldn't find the sermon title in the email; rerun with the thread id after checking.")
+            raise RuntimeError(f"Couldn't find the sermon title in '{subject}'; rerun with the thread id after checking.")
         print(f"Title: {title} ({len(slides)} slides)")
         texts = [title] + [lower_thirds.ocr(p) for p in slides[1:]]
 
