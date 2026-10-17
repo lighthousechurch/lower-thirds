@@ -215,4 +215,17 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(tb, file=sys.stderr)
+        if os.environ.get("GITHUB_ACTIONS"):
+            # Show the real error in the run's annotations, not just "exit code 1".
+            msg = f"{type(e).__name__}: {e}".replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print(f"::error title=Lower thirds failed::{msg}")
+            if os.environ.get("GITHUB_STEP_SUMMARY"):
+                with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+                    f.write(f"## Failed\n\n```\n{tb}\n```\n")
+        sys.exit(1)

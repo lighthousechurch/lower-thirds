@@ -40,9 +40,9 @@ jobs:
             *) [ "$zone" = PST ] && ok=true || ok=false ;;
           esac
           echo "ok=$ok" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.gate.outputs.ok == 'true'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.gate.outputs.ok == 'true'
         with:
           python-version: "3.12"
@@ -71,7 +71,7 @@ jobs:
           [ "${{ inputs.dry_run }}" = "true" ] && args+=(--dry-run)
           [ "${{ inputs.force }}" = "true" ] && args+=(--force)
           python3 gmail_run.py "${args[@]}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: steps.check.outputs.run == 'true'
         with:
           name: lower-thirds
