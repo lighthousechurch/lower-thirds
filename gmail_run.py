@@ -65,7 +65,7 @@ def plain_body(msg):
 def find_title(body, attachment_names, subject):
     """Sermon title from the email body, else the .pptx name, else None."""
     text = " ".join(body.split())
-    m = re.search(r"title(?: of (?:the|my) sermon)? is (?:simply |called )?[\"“]?(.+?)[\"”]?(?:\.(?:\s|$)|$|\s--)",
+    m = re.search(r"title(?: of (?:the|my|this|sunday's) (?:sermon|message))? is (?:simply |called )?[\"“]?(.+?)[\"”]?(?:\.(?:\s|$)|$|\s--)",
                   text, re.I)
     if m:
         return m.group(1).strip()
