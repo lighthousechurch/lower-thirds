@@ -32,7 +32,8 @@ import lower_thirds
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 SEARCH = ("from:josh@lighthousechurchnc.org has:attachment "
           "(filename:jpg OR filename:jpeg) (sermon OR slides) newer_than:14d")
-SLIDE_NAME = re.compile(r"^slide\s*\d+\.jpe?g$", re.I)
+# Josh has used both "Slide1.jpeg" and "1.jpg".
+SLIDE_NAME = re.compile(r"^(?:slide\s*)?\d+\.jpe?g$", re.I)
 DONE_LABEL = "Lower thirds/Drafted"
 BODY = ("Hey @Febe Garcia and @Diego Duarte, here are the lower-thirds in .png format. "
         "Let me know if these work!")
