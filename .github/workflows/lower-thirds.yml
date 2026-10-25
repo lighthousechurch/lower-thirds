@@ -26,8 +26,15 @@ on:
       message:
         description: "Draft text (blank = the usual message)"
         required: false
+      debug:
+        description: "Save slides and PNGs to a debug/<run> branch"
+        type: boolean
+        default: false
 
 concurrency: lower-thirds
+
+permissions:
+  contents: write
 
 jobs:
   run:
@@ -75,7 +82,18 @@ jobs:
           [ "${{ inputs.dry_run }}" = "true" ] && args+=(--dry-run)
           [ "${{ inputs.force }}" = "true" ] && args+=(--force)
           [ -n "$MESSAGE" ] && args+=(--message "$MESSAGE")
+          [ "${{ inputs.debug }}" = "true" ] && args+=(--save-slides out/slides)
           python3 gmail_run.py "${args[@]}"
+      - name: Save debug branch
+        if: always() && inputs.debug
+        run: |
+          [ -d out ] || exit 0
+          git config user.name "lower-thirds bot"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout -b "debug/${{ github.run_id }}"
+          git add -f out
+          git commit -qm "Debug output for run ${{ github.run_id }}"
+          git push -q origin "debug/${{ github.run_id }}"
       - uses: actions/upload-artifact@v5
         if: steps.check.outputs.run == 'true'
         with:

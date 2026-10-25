@@ -14,6 +14,7 @@ import io
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 from datetime import datetime, timedelta
@@ -175,6 +176,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="build the zip but don't create a draft")
     ap.add_argument("--force", action="store_true", help="ignore the already-drafted/replied checks")
     ap.add_argument("--check", action="store_true", help="only report whether there is new work")
+    ap.add_argument("--save-slides", help="also copy the downloaded slides into this folder")
     ap.add_argument("--message", help="draft text instead of the usual message")
     ap.add_argument("--out", default="out")
     args = ap.parse_args()
@@ -209,6 +211,17 @@ def main():
             raise RuntimeError(f"Couldn't find the sermon title in '{subject}'; rerun with the thread id after checking.")
         print(f"Title: {title} ({len(slides)} slides)")
         texts = [title] + [lower_thirds.ocr(p) for p in slides[1:]]
+        if args.save_slides:
+            Path(args.save_slides).mkdir(parents=True, exist_ok=True)
+            for p in slides:
+                shutil.copy(p, Path(args.save_slides) / p.name)
+
+    blank = [i for i, t in enumerate(texts[1:], 2) if lower_thirds._words(t) < 2]
+    if len(blank) > (len(texts) - 1) / 2:
+        raise RuntimeError(f"Couldn't read text on {len(blank)} of {len(texts) - 1} slides "
+                           f"(slides {', '.join(map(str, blank))}); no draft created.")
+    if blank:
+        print(f"WARNING: little or no text read on slides {', '.join(map(str, blank))}")
 
     out = Path(args.out)
     zip_path = lower_thirds.build(texts, out, f"{title} - lower thirds.zip")

@@ -43,17 +43,47 @@ def natural_key(p):
 
 # --- OCR --------------------------------------------------------------------
 
-def ocr(path):
-    im = Image.open(path).convert("RGB")
-    # White text on blue: pixels with min(R,G,B) > 232 become black, rest white.
-    m = np.asarray(im).min(axis=2)
-    bw = Image.fromarray(np.where(m > 232, 0, 255).astype(np.uint8))
+def _tesseract(im):
     out = subprocess.run(["tesseract", "stdin", "stdout", "-l", "eng"],
-                         input=_png_bytes(bw), capture_output=True, check=True).stdout.decode("utf-8")
+                         input=_png_bytes(im), capture_output=True, check=True).stdout.decode("utf-8")
     text = re.sub(r"\s*\n\s*", " ", out).replace("|", "I")
     text = re.sub(r"\s{2,}", " ", text)
     text = re.sub(r"[^\x20-\x7E‘-”—…]", "", text)
     return text.strip()
+
+
+def _otsu(gray):
+    hist = np.bincount(gray.ravel(), minlength=256).astype(float)
+    total, sum_all = gray.size, np.dot(np.arange(256), hist)
+    best, thresh, w_b, sum_b = -1.0, 128, 0.0, 0.0
+    for t in range(256):
+        w_b += hist[t]
+        if w_b == 0 or w_b == total:
+            continue
+        sum_b += t * hist[t]
+        m_b, m_f = sum_b / w_b, (sum_all - sum_b) / (total - w_b)
+        between = w_b * (total - w_b) * (m_b - m_f) ** 2
+        if between > best:
+            best, thresh = between, t
+    return thresh
+
+
+def _words(text):
+    return sum(len(w) > 1 and w.isalpha() for w in re.findall(r"[A-Za-z']+", text))
+
+
+def ocr(path):
+    """Read a slide's text. Tries several clean-ups and keeps the one with the most real words."""
+    rgb = np.asarray(Image.open(path).convert("RGB"))
+    gray = np.asarray(Image.open(path).convert("L"))
+    t = _otsu(gray)
+    candidates = [
+        np.where(rgb.min(axis=2) > 232, 0, 255),  # white text on the blue texture
+        np.where(gray > t, 0, 255),               # light text, any background
+        np.where(gray > t, 255, 0),               # dark text, any background
+    ]
+    texts = [_tesseract(Image.fromarray(c.astype(np.uint8))) for c in candidates]
+    return max(texts, key=_words)
 
 
 def _png_bytes(im):
