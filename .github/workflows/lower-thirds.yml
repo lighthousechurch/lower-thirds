@@ -29,6 +29,10 @@ on:
       replace:
         description: "Fix misreads: old=>new; old2=>new2"
         required: false
+      send_draft:
+        description: "Send the lower-thirds draft already on this thread (needs thread id)"
+        type: boolean
+        default: false
       debug:
         description: "Save slides and PNGs to a debug/<run> branch"
         type: boolean
@@ -62,9 +66,14 @@ jobs:
           cache: pip
       - if: steps.gate.outputs.ok == 'true'
         run: pip install -r requirements.txt
+      - name: Send existing draft
+        if: steps.gate.outputs.ok == 'true' && inputs.send_draft
+        env:
+          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+        run: python3 gmail_run.py --thread "${{ inputs.thread }}" --send-draft
       - name: Check for new slides email
         id: check
-        if: steps.gate.outputs.ok == 'true'
+        if: steps.gate.outputs.ok == 'true' && !inputs.send_draft
         env:
           GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
         run: |

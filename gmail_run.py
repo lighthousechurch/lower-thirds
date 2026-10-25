@@ -170,12 +170,33 @@ def reply_all(svc, me, thread, zip_path, body=BODY):
     return draft, to, cc
 
 
+def send_draft(svc, thread_id):
+    """Send the newest draft on the thread that carries a lower-thirds zip."""
+    if not thread_id:
+        raise RuntimeError("--send-draft needs --thread")
+    found = []
+    for d in svc.users().drafts().list(userId="me", maxResults=50).execute().get("drafts", []):
+        if d["message"].get("threadId") != thread_id:
+            continue
+        full = svc.users().drafts().get(userId="me", id=d["id"], format="full").execute()
+        if any((p.get("filename") or "").endswith("lower thirds.zip") for p in parts(full["message"]["payload"])):
+            found.append((int(full["message"].get("internalDate", 0)), full))
+    if not found:
+        raise RuntimeError(f"No lower-thirds draft found on thread {thread_id}.")
+    _, draft = max(found, key=lambda f: f[0])
+    sent = svc.users().drafts().send(userId="me", body={"id": draft["id"]}).execute()
+    h = headers(draft["message"])
+    print(f"Sent draft {draft['id']} as message {sent['id']} to {h.get('to', '')} cc {h.get('cc', '')}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--thread", help="use this thread id instead of searching")
     ap.add_argument("--dry-run", action="store_true", help="build the zip but don't create a draft")
     ap.add_argument("--force", action="store_true", help="ignore the already-drafted/replied checks")
     ap.add_argument("--check", action="store_true", help="only report whether there is new work")
+    ap.add_argument("--send-draft", action="store_true",
+                    help="send the lower-thirds draft already on --thread, then stop")
     ap.add_argument("--save-slides", help="also copy the downloaded slides into this folder")
     ap.add_argument("--replace", action="append", default=[],
                     help='fix a misread before rendering, e.g. "Luke 0:1-%%=>Luke 5:1-4" (repeatable)')
@@ -185,6 +206,9 @@ def main():
 
     svc = gmail()
     me = svc.users().getProfile(userId="me").execute()["emailAddress"].lower()
+    if args.send_draft:
+        send_draft(svc, args.thread)
+        return
     if args.check:
         if not args.force and not args.thread and done_this_week(svc):
             print("Already drafted this week's lower thirds.")
