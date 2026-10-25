@@ -26,6 +26,9 @@ on:
       message:
         description: "Draft text (blank = the usual message)"
         required: false
+      replace:
+        description: "Fix misreads: old=>new; old2=>new2"
+        required: false
       debug:
         description: "Save slides and PNGs to a debug/<run> branch"
         type: boolean
@@ -70,18 +73,20 @@ jobs:
           [ "${{ inputs.force }}" = "true" ] && args+=(--force)
           python3 gmail_run.py "${args[@]}"
       - if: steps.check.outputs.run == 'true'
-        run: sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr tesseract-ocr-eng
+        run: sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr tesseract-ocr-eng wamerican
       - name: Build lower thirds and draft reply
         if: steps.check.outputs.run == 'true'
         env:
           GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
           MESSAGE: ${{ inputs.message }}
+          REPLACE: ${{ inputs.replace }}
         run: |
           args=()
           [ -n "${{ inputs.thread }}" ] && args+=(--thread "${{ inputs.thread }}")
           [ "${{ inputs.dry_run }}" = "true" ] && args+=(--dry-run)
           [ "${{ inputs.force }}" = "true" ] && args+=(--force)
           [ -n "$MESSAGE" ] && args+=(--message "$MESSAGE")
+          [ -n "$REPLACE" ] && args+=(--replace "$REPLACE")
           [ "${{ inputs.debug }}" = "true" ] && args+=(--save-slides out/slides)
           python3 gmail_run.py "${args[@]}"
       - name: Save debug branch

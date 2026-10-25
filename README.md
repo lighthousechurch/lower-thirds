@@ -5,7 +5,7 @@ Turns Josh's weekly sermon slide JPGs into 1920×1080 transparent PNG lower thir
 ## Setup
 
 ```sh
-sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+sudo apt-get install -y tesseract-ocr tesseract-ocr-eng wamerican
 pip install -r requirements.txt
 ```
 

@@ -68,22 +68,123 @@ def _otsu(gray):
     return thresh
 
 
+_DICT = None
+# OCR confusions seen in decorative fonts: f read as j, c as e, I as l or !, H as fl.
+_SWAPS = {"j": "f", "e": "c", "c": "e", "l": "i"}
+# Misreads that happen to be dictionary words themselves.
+_COMMON = {"oj": "of", "Oj": "Of", "ij": "if", "Ij": "If", "jor": "for", "Jor": "For"}
+
+
+def _dictionary():
+    global _DICT
+    if _DICT is None:
+        try:
+            with open("/usr/share/dict/words") as f:
+                _DICT = {w.strip().lower() for w in f if w.strip().isalpha() or "'" in w}
+        except OSError:
+            _DICT = set()
+    return _DICT
+
+
+def _is_word(w):
+    w = w.lower().strip("'")
+    return w in _dictionary() or w.endswith("'s") and w[:-2] in _dictionary()
+
+
+def _fix_word(w):
+    return _fix_cost(w)[0]
+
+
+def _fix_cost(w):
+    """(corrected word, number of letters changed); cost 99 if no fix found."""
+    if not _dictionary() or not w.isalpha():
+        return w, 99
+    if _is_word(w):
+        return w, 0
+    spots = [i for i, ch in enumerate(w.lower()) if ch in _SWAPS][:5]
+    best = None
+    for mask in range(1, 1 << len(spots)):
+        cand = list(w)
+        for b, i in enumerate(spots):
+            if mask >> b & 1:
+                new = _SWAPS[w[i].lower()]
+                cand[i] = new.upper() if w[i].isupper() or (i == 0 and new == "i") else new
+        cand = "".join(cand)
+        if _is_word(cand) and (best is None or bin(mask).count("1") < best[1]):
+            best = (cand, bin(mask).count("1"))
+    return best or (w, 99)
+
+
+def clean_text(text):
+    """Fix common OCR misreads using an English word list."""
+    text = re.sub(r"(^|\s)[!|](?=\s)", r"\1I", text)          # "! commend" -> "I commend"
+    text = re.sub(r"\bfl(?=[a-z]\b)", "H", text)                # "fle" -> "He"
+    tokens = re.split(r"([A-Za-z']+)", text)
+    # Rejoin words split in two ("per ject" -> "perfect") when the second half
+    # isn't a word and can't be fixed on its own with a single change.
+    for i in range(1, len(tokens) - 2, 2):
+        a, gap, b = tokens[i], tokens[i + 1], tokens[i + 2]
+        if not a or gap != " " or not b or _is_word(b) or b in _COMMON or _fix_cost(b)[1] <= 1:
+            continue
+        joined, cost = _fix_cost(a + b)
+        if cost < 99:
+            tokens[i], tokens[i + 1], tokens[i + 2] = joined, "", ""
+    for i in range(1, len(tokens), 2):
+        tokens[i] = _COMMON.get(tokens[i], None) or _fix_word(tokens[i])
+    text = "".join(tokens)
+    return re.sub(r"\s{2,}", " ", text).strip()
+
+
 def _words(text):
-    return sum(len(w) > 1 and w.isalpha() for w in re.findall(r"[A-Za-z']+", text))
+    """Number of real English words (or of 2+ letter words if no word list)."""
+    words = re.findall(r"[A-Za-z']+", text)
+    if _dictionary():
+        return sum(len(w) > 1 and _is_word(w) or w in ("I", "a", "A") for w in words)
+    return sum(len(w) > 1 and w.isalpha() for w in words)
+
+
+def _score(text):
+    """Real words minus a penalty for junk; 0 when it's mostly not words (a map, a photo).
+    Single letters don't count, so stray "I"s from background marks never win a tie."""
+    words = re.findall(r"[A-Za-z']+", text)
+    real = sum(len(w) > 1 and _is_word(w) for w in words) if _dictionary() else _words(text)
+    long_real = sum(len(w) > 2 and _is_word(w) for w in words) if _dictionary() else real
+    if not words or long_real < 2 or real / len(words) < 0.6:
+        return 0
+    junk = len(words) - _words(text) + len(re.findall(r"[~\\@#%^*_=+<>{}\[\]]", text))
+    return real - 2 * junk
+
+
+def _trim(text):
+    """Drop stray marks at the start/end left by pictures behind the text."""
+    tokens = text.split()
+    ok = lambda t: _words(t) > 0 or re.search(r"\d", t) or len(re.sub(r"\W", "", t)) >= 4
+    while tokens and not ok(tokens[0]):
+        tokens.pop(0)
+    while tokens and not ok(tokens[-1]):
+        tokens.pop()
+    text = " ".join(tokens)
+    return re.sub(r"\s*[~\\]+\s*", " ", text).strip()
 
 
 def ocr(path):
     """Read a slide's text. Tries several clean-ups and keeps the one with the most real words."""
-    rgb = np.asarray(Image.open(path).convert("RGB"))
-    gray = np.asarray(Image.open(path).convert("L"))
+    img = Image.open(path).convert("RGB")
+    rgb = np.asarray(img)
+    gray = np.asarray(img.convert("L"))
     t = _otsu(gray)
     candidates = [
         np.where(rgb.min(axis=2) > 232, 0, 255),  # white text on the blue texture
         np.where(gray > t, 0, 255),               # light text, any background
         np.where(gray > t, 255, 0),               # dark text, any background
     ]
-    texts = [_tesseract(Image.fromarray(c.astype(np.uint8))) for c in candidates]
-    return max(texts, key=_words)
+    for ch in range(3):                           # coloured text (e.g. yellow titles)
+        c = rgb[:, :, ch]
+        tc = _otsu(c)
+        candidates += [np.where(c > tc, 0, 255), np.where(c > tc, 255, 0)]
+    texts = [_trim(clean_text(_tesseract(Image.fromarray(c.astype(np.uint8))))) for c in candidates]
+    best = max(texts, key=_score)
+    return best if _score(best) else ""
 
 
 def _png_bytes(im):
