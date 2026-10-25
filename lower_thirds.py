@@ -124,9 +124,11 @@ def build(texts, out, zip_name=None):
     for i, t in enumerate(texts, 1):
         img, lines = render(t, band, title=(i == 1))
         name = f"{i:0{pad}d}.png"
-        # 256-colour palette keeps transparency and looks identical, at ~1/6 the size,
-        # so a long sermon's zip stays under Gmail's 25 MB attachment limit.
-        img.quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(out / name, optimize=True)
+        # Reduce to 256 colours (looks identical) but save as a normal RGBA PNG:
+        # ~230 KB instead of ~560 KB, so long sermons fit under Gmail's 25 MB limit.
+        # Palette PNGs came through blank on the stream team's iPhone (Oct 24).
+        img = img.quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).convert("RGBA")
+        img.save(out / name, optimize=True)
         names.append(name)
         print(name, "|", " / ".join(lines))
     if not zip_name:
