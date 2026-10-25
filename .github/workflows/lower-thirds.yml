@@ -23,6 +23,9 @@ on:
         description: "Redo even if already drafted/replied"
         type: boolean
         default: false
+      message:
+        description: "Draft text (blank = the usual message)"
+        required: false
 
 concurrency: lower-thirds
 
@@ -65,11 +68,13 @@ jobs:
         if: steps.check.outputs.run == 'true'
         env:
           GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+          MESSAGE: ${{ inputs.message }}
         run: |
           args=()
           [ -n "${{ inputs.thread }}" ] && args+=(--thread "${{ inputs.thread }}")
           [ "${{ inputs.dry_run }}" = "true" ] && args+=(--dry-run)
           [ "${{ inputs.force }}" = "true" ] && args+=(--force)
+          [ -n "$MESSAGE" ] && args+=(--message "$MESSAGE")
           python3 gmail_run.py "${args[@]}"
       - uses: actions/upload-artifact@v5
         if: steps.check.outputs.run == 'true'

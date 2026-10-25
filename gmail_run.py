@@ -143,7 +143,7 @@ def download_slides(svc, msg, dest):
     return sorted(files, key=lower_thirds.natural_key), names
 
 
-def reply_all(svc, me, thread, zip_path):
+def reply_all(svc, me, thread, zip_path, body=BODY):
     last = thread["messages"][-1]
     h = headers(last)
     def addrs(*names):
@@ -160,7 +160,7 @@ def reply_all(svc, me, thread, zip_path):
     em["Subject"] = subject if subject.lower().startswith("re:") else f"Re: {subject}"
     em["In-Reply-To"] = h.get("message-id", "")
     em["References"] = f'{h.get("references", "")} {h.get("message-id", "")}'.strip()
-    em.set_content(BODY)
+    em.set_content(body)
     em.add_attachment(zip_path.read_bytes(), maintype="application", subtype="zip", filename=zip_path.name)
 
     media = MediaIoBaseUpload(io.BytesIO(em.as_bytes()), mimetype="message/rfc822", resumable=True)
@@ -175,6 +175,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="build the zip but don't create a draft")
     ap.add_argument("--force", action="store_true", help="ignore the already-drafted/replied checks")
     ap.add_argument("--check", action="store_true", help="only report whether there is new work")
+    ap.add_argument("--message", help="draft text instead of the usual message")
     ap.add_argument("--out", default="out")
     args = ap.parse_args()
 
@@ -222,7 +223,7 @@ def main():
     if args.dry_run:
         print("Dry run: no draft created.")
         return
-    draft, to, cc = reply_all(svc, me, thread, zip_path)
+    draft, to, cc = reply_all(svc, me, thread, zip_path, args.message or BODY)
     svc.users().threads().modify(userId="me", id=thread["id"],
                                  body={"addLabelIds": [label_id(svc, create=True)]}).execute()
     print(f"Draft {draft['id']} created. To: {', '.join(to)}  Cc: {', '.join(cc)}")
