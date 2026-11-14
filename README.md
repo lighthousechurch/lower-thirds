@@ -12,8 +12,9 @@ pip install -r requirements.txt
 ## Automatic run (GitHub Actions)
 
 `.github/workflows/lower-thirds.yml` runs Wed–Sat at 10am and 7pm Pacific. Each run checks Gmail for Josh's
-slides email; once a draft has been made for this week, the remaining runs stop early. The draft is a reply-all
-on Josh's thread with the zip attached — review it in Gmail and hit send. Each run's page shows the slide text
+slides email; once a draft has been made for this week, the remaining runs stop early. It replies-all on
+Josh's thread with the zip attached and sends it automatically (tick "draft only" on a manual run to review
+first). If text can't be read on most slides, nothing is sent and the run fails. Each run's page shows the slide text
 for checking, and the PNGs are downloadable as a run artifact.
 
 Run it by hand from the Actions tab ("Run workflow"), optionally with a thread id, dry run, or force.

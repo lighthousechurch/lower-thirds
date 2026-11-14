@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Find Josh's latest sermon slides email, build the lower thirds, and leave a
-reply-all draft on the thread with the zip attached.
+"""Find Josh's latest sermon slides email, build the lower thirds, and reply-all
+on the thread with the zip attached (sent automatically; --draft-only to review first).
 
 Needs GMAIL_TOKEN_JSON (from authorize.py) in the environment.
 
@@ -200,7 +200,8 @@ def main():
     ap.add_argument("--save-slides", help="also copy the downloaded slides into this folder")
     ap.add_argument("--replace", action="append", default=[],
                     help='fix a misread before rendering, e.g. "Luke 0:1-%%=>Luke 5:1-4" (repeatable)')
-    ap.add_argument("--message", help="draft text instead of the usual message")
+    ap.add_argument("--message", help="email text instead of the usual message")
+    ap.add_argument("--draft-only", action="store_true", help="leave the reply as a draft instead of sending it")
     ap.add_argument("--out", default="out")
     args = ap.parse_args()
 
@@ -250,7 +251,7 @@ def main():
     blank = [i for i, t in enumerate(texts[1:], 2) if lower_thirds._words(t) < 2]
     if len(blank) > (len(texts) - 1) / 2:
         raise RuntimeError(f"Couldn't read text on {len(blank)} of {len(texts) - 1} slides "
-                           f"(slides {', '.join(map(str, blank))}); no draft created.")
+                           f"(slides {', '.join(map(str, blank))}); nothing sent.")
     if blank:
         print(f"WARNING: little or no text read on slides {', '.join(map(str, blank))}")
 
@@ -270,7 +271,11 @@ def main():
     draft, to, cc = reply_all(svc, me, thread, zip_path, args.message or BODY)
     svc.users().threads().modify(userId="me", id=thread["id"],
                                  body={"addLabelIds": [label_id(svc, create=True)]}).execute()
-    print(f"Draft {draft['id']} created. To: {', '.join(to)}  Cc: {', '.join(cc)}")
+    if args.draft_only:
+        print(f"Draft {draft['id']} created. To: {', '.join(to)}  Cc: {', '.join(cc)}")
+        return
+    sent = svc.users().drafts().send(userId="me", body={"id": draft["id"]}).execute()
+    print(f"Sent {sent['id']}. To: {', '.join(to)}  Cc: {', '.join(cc)}")
 
 
 if __name__ == "__main__":
