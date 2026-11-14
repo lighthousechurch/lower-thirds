@@ -67,7 +67,7 @@ def plain_body(msg):
 def find_title(body, attachment_names, subject):
     """Sermon title from the email body, else the .pptx name, else None."""
     text = " ".join(body.split())
-    m = re.search(r"title(?: of (?:the|my|this|sunday's) (?:sermon|message))? is (?:simply |called )?[\"“]?(.+?)[\"”]?(?:\.(?:\s|$)|$|\s--)",
+    m = re.search(r"title(?: of (?:the|my|this|sunday's) (?:sermon|message))? is (?:simply |called )?[\"“]?(.+?[?!]?)[\"”]?(?:\.(?:\s|$)|(?<=[?!])(?:\s|$)|$|\s--)",
                   text, re.I)
     if m:
         return m.group(1).strip()
@@ -256,7 +256,8 @@ def main():
         print(f"WARNING: little or no text read on slides {', '.join(map(str, blank))}")
 
     out = Path(args.out)
-    zip_path = lower_thirds.build(texts, out, f"{title} - lower thirds.zip")
+    safe_title = re.sub(r'[\\/:*?"<>|]', "", title).strip()  # "?" etc. break Windows file names
+    zip_path = lower_thirds.build(texts, out, f"{safe_title} - lower thirds.zip")
     (out / "texts.json").write_text(json.dumps(texts, ensure_ascii=False, indent=2))
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
