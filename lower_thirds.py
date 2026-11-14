@@ -187,6 +187,24 @@ def ocr(path):
     return best if _score(best) else ""
 
 
+def pptx_texts(path):
+    """Text of each slide in a PowerPoint, text boxes in the order the deck lists them."""
+    from pptx import Presentation
+
+    def boxes(shapes):
+        for sh in shapes:
+            if sh.shape_type == 6:  # group
+                yield from boxes(sh.shapes)
+            elif sh.has_text_frame and sh.text_frame.text.strip():
+                yield sh
+
+    out = []
+    for slide in Presentation(path).slides:
+        found = list(boxes(slide.shapes))
+        out.append(" · ".join(" ".join(sh.text_frame.text.split()) for sh in found))
+    return out
+
+
 def _png_bytes(im):
     buf = io.BytesIO()
     im.save(buf, "PNG")

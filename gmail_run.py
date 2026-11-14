@@ -66,7 +66,7 @@ def plain_body(msg):
 
 def find_title(body, attachment_names, subject):
     """Sermon title from the email body, else the .pptx name, else None."""
-    text = " ".join(body.split())
+    text = " ".join(re.sub(r"[*_]", "", body).split())  # bold shows up as *Title*
     m = re.search(r"title(?: of (?:the|my|this|sunday's) (?:sermon|message))? is (?:simply |called )?[\"“]?(.+?[?!]?)[\"”]?(?:\.(?:\s|$)|(?<=[?!])(?:\s|$)|$|\s--)",
                   text, re.I)
     if m:
@@ -128,20 +128,25 @@ def pick_thread(svc, me, thread_id=None, force=False):
 
 
 def download_slides(svc, msg, dest):
-    files, names = [], []
+    """Save the SlideN.jpg attachments (sorted) and the first .pptx, if any."""
+    files, names, pptx = [], [], None
     for p in parts(msg["payload"]):
         name = p.get("filename") or ""
         if not name:
             continue
         names.append(name)
-        if not SLIDE_NAME.match(name):
+        is_pptx = name.lower().endswith(".pptx") and pptx is None
+        if not SLIDE_NAME.match(name) and not is_pptx:
             continue
         att = svc.users().messages().attachments().get(
             userId="me", messageId=msg["id"], id=p["body"]["attachmentId"]).execute()
         path = Path(dest) / name
         path.write_bytes(base64.urlsafe_b64decode(att["data"]))
-        files.append(path)
-    return sorted(files, key=lower_thirds.natural_key), names
+        if is_pptx:
+            pptx = path
+        else:
+            files.append(path)
+    return sorted(files, key=lower_thirds.natural_key), names, pptx
 
 
 def reply_all(svc, me, thread, zip_path, body=BODY):
@@ -232,12 +237,22 @@ def main():
     print(f"Thread {thread['id']}: {subject}")
 
     with tempfile.TemporaryDirectory() as tmp:
-        slides, names = download_slides(svc, msg, tmp)
+        slides, names, pptx = download_slides(svc, msg, tmp)
         title = find_title(plain_body(msg), names, subject)
         if not title:
             raise RuntimeError(f"Couldn't find the sermon title in '{subject}'; rerun with the thread id after checking.")
         print(f"Title: {title} ({len(slides)} slides)")
-        texts = [title] + [lower_thirds.ocr(p) for p in slides[1:]]
+        texts = None
+        if pptx:
+            # The PowerPoint has the real typed text, so prefer it to reading the images.
+            deck = lower_thirds.pptx_texts(pptx)
+            if len(deck) == len(slides):
+                print(f"Using text from {pptx.name}")
+                texts = [title] + deck[1:]
+            else:
+                print(f"{pptx.name} has {len(deck)} slides but there are {len(slides)} images; reading images instead")
+        if texts is None:
+            texts = [title] + [lower_thirds.ocr(p) for p in slides[1:]]
         if args.save_slides:
             Path(args.save_slides).mkdir(parents=True, exist_ok=True)
             for p in slides:
